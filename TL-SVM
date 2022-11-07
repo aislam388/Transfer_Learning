@@ -1,0 +1,288 @@
+from keras.applications.resnet50 import ResNet50
+# resnet_weights = '../input/resnet50/resnet50_weigts_tf_dim_ordering_tf_kernels.h5'
+resnet_model = ResNet50(weights='imagenet', include_top=False)
+# _get_predictions(resnet_model)
+
+from keras.layers import Input, Lambda, Dense, Flatten
+from keras.models import Model
+from keras.preprocessing import image
+from keras.preprocessing.image import ImageDataGenerator
+from keras.applications.resnet50 import preprocess_input
+from keras.models import Sequential
+import numpy as np
+from glob import glob
+import matplotlib.pyplot as plt
+import os
+from PIL import Image
+
+
+def _get_features(img_path):
+  img = image.load_img(img_path, target_size=(224,224))
+  img_data = image.img_to_array(img)
+  img_data = np.expand_dims(img_data, axis=0)
+  img_data = preprocess_input(img_data)
+  resnet_features = resnet_model.predict(img_data)
+  return resnet_features
+
+
+basepath = "/content/drive/My Drive/LIDC-IDRI-0001/01-01-2000-30178/3000566-03192/"
+# basepath = "content/drive/MyDrive/LIDC-IDRI-0001/01-01-2000-30178/3000566-03192"
+class1 = os.listdir(basepath + "Positivepng/")
+class2 = os.listdir(basepath + "Negativepng/")
+print(class1)
+print(class2)
+
+data = {'Positivepng': class1[:480], 
+        'Negativepng': class2[:480], 
+        'test': [class1[481], class2[481]]}
+
+features = {"Positivepng":[], "Negativepng":[], "test":[]}
+test_features = []
+test_imgs = []
+
+for label, val in data.items():
+  # print(label,val)
+  for k, each in enumerate(val):
+    # print(k,each)
+    if label == "test" and k == 0:
+      img_path = basepath + "/Positivepng/" + each 
+      # print(img_path)
+      test_imgs.append(img_path)
+    elif label == "test" and k == 1:
+      img_path = basepath + "/Negativepng/" + each
+      # print(img_path)
+      test_imgs.append(img_path)
+    else: 
+      img_path = basepath + label.title() + "/" + each
+      # print(img_path)
+      # print(label.title())
+    feats = _get_features(img_path)
+    # feats = np.resize(feats,(224,224,3))
+    test_features.append(feats)
+    # print("dim: ",feats.ndim, feats.shape, feats.dtype)
+    # print(type(feats))
+
+    features[label].append(feats.flatten())
+# print(feats)
+
+print("dimension:",test_features[0].ndim, " shape:",test_features[0].shape, " Data_Type:", test_features[0].dtype)
+
+import pandas as pd
+test_label=[]
+dataset = pd.DataFrame()
+for label, feats in features.items():
+    # print(label,feats)
+    test_label.append(label)
+    temp_df = pd.DataFrame(feats)
+    temp_df['label'] = label
+    dataset = dataset.append(temp_df, ignore_index=True)
+dataset.head()
+
+for i in test_label:
+  print(i)
+
+y = dataset[dataset.label != 'test'].label
+X = dataset[dataset.label != 'test'].drop('label', axis=1)
+
+
+print(y.shape, y.ndim, y.dtype)
+print(X.shape, X.ndim, X.dtype)
+
+from sklearn.model_selection import train_test_split
+
+Xtrain, Xtest, ytrain, ytest = train_test_split(X, y, test_size=0.3)
+# print(Xtrain,Xtest, ytrain,ytest)
+
+import time
+start = time.time()
+from sklearn import svm
+from sklearn.svm import SVC
+clf = SVC()
+clf.fit(Xtrain, ytrain)
+preds = clf.predict(Xtest)
+
+print('Running time: %.4f seconds' % (time.time()-start))
+
+from sklearn.metrics import accuracy_score, confusion_matrix, classification_report
+print("Accuracy on y_test:",accuracy_score(ytest, preds))
+
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+cm = confusion_matrix(ytest, preds)
+sns.heatmap(cm, annot=True, cbar=False)
+plt.xlabel('Predicted label')
+plt.ylabel('True label')
+plt.title('Confusion Matrix')
+
+from sklearn.metrics import classification_report
+print(classification_report(ytest, preds))
+
+# Parameters for Image Generator
+params = {'rescale':1./255,  'rotation_range':40, 'zoom_range':0.15, 'width_shift_range':0.2, 'height_shift_range':0.2, 'shear_range':0.05, 'horizontal_flip':True, 'featurewise_std_normalization':True, 'featurewise_center':True, 'fill_mode':'nearest'}
+# params = {'rescale':1./255, 'validation_split': 0.2}
+# Image Data Generator configuration
+image_gen = ImageDataGenerator(**params)
+    
+# Train Split
+train_generator  = image_gen.flow_from_directory(
+#  dataframe = dataset,
+ directory= '/content/drive/My Drive/LIDC-IDRI-0001/01-01-2000-30178/3000566-03192/Training/',
+#  x_col=X,
+#  y_col=y,
+batch_size=5,
+target_size=(224, 224),
+color_mode="rgb",
+class_mode="categorical",
+shuffle=True,
+seed=42)
+    
+# Validation Split
+# dataframe=dataset,
+valid_generator  = image_gen.flow_from_directory(
+directory= '/content/drive/My Drive/LIDC-IDRI-0001/01-01-2000-30178/3000566-03192/Validation/',
+# x_col=X,
+# y_col=y,
+batch_size=5,
+target_size=(224, 224),
+color_mode="rgb",
+class_mode="categorical",
+shuffle=True,
+seed=42)
+    
+# Test Split
+test_generator  = image_gen.flow_from_directory(
+directory= '/content/drive/My Drive/LIDC-IDRI-0001/01-01-2000-30178/3000566-03192/Testing/',
+batch_size=5,
+target_size=(224, 224),
+color_mode="rgb",
+class_mode="categorical",
+shuffle=True,
+seed=42)
+
+from sklearn.neural_network import 
+
+# CLASSIFYING
+from sklearn.feature_selection import VarianceThreshold
+from sklearn.neural_network import MLPClassifier
+from sklearn.pipeline import Pipeline
+
+model = MLPClassifier(hidden_layer_sizes=(100, 10))
+pipeline = Pipeline([('low_variance_filter', VarianceThreshold()), ('model', model)])
+pipeline.fit(X, y)
+
+print ("Model Trained on pre-trained features")
+
+X_train, X_test, y_train, y_test = train_test_split(X, y)
+model.predict_proba(X_test)
+                                                    
+
+from sklearn.datasets import make_classification
+from sklearn.model_selection import train_test_split
+# X, y = make_classification(n_samples=100, random_state=1)
+X_train, X_test, y_train, y_test = train_test_split(X, y, stratify=y,
+                                                    random_state=1)
+clf = MLPClassifier(random_state=1, max_iter=300).fit(X_train, y_train)
+clf.predict_proba(X_test[:1])
+# ([[0.038..., 0.961...]])
+clf.predict(X_test[:5, :])
+# array([1, 0, 1, 0, 1])
+clf.score(X_test, y_test)
+# 0.8...
+
+
+# model.compile(loss=keras.losses.categorical_crossentropy, optimizer='Adam', metrics=['accuracy']) 
+
+STEP_SIZE_TRAIN=train_generator.n//train_generator.batch_size
+STEP_SIZE_VALID=valid_generator.n//valid_generator.batch_size
+history = model.fit_generator(generator=train_generator,
+                    steps_per_epoch=STEP_SIZE_TRAIN,
+                    validation_data=valid_generator,
+                    validation_steps=STEP_SIZE_VALID,
+                    epochs=50)
+
+preds = pipeline.predict(features['test'])
+
+f, ax = plt.subplots(1, 2)
+for i in range(2):
+  ax[i].imshow(Image.open(test_imgs[i]).resize((200, 200), Image.ANTIALIAS))
+  ax[i].text(10, 180, 'Predicted: %s' % preds[i], color='k', backgroundcolor='red', alpha=0.8)
+plt.show()
+
+print(pipeline.score(X_train))
+
+# for i in test_features:
+  # print(len(i))
+
+import os
+
+import sklearn
+from sklearn.model_selection import cross_validate, GridSearchCV
+# from sklearn import  grid_search
+from sklearn.metrics import confusion_matrix, classification_report
+from sklearn.svm import SVC
+from sklearn.externals import joblib
+from sklearn.model_selection import train_test_split
+from sklearn import svm
+
+
+clf = svm.SVC()
+clf.fit(X,y)
+print(SVC())
+
+def train_svm_classifer(features, labels, model_output_path):
+    """
+    train_svm_classifer will train a SVM, saved the trained and SVM model and
+    report the classification performance
+    features: array of input features
+    labels: array of labels associated with the input features
+    model_output_path: path for storing the trained svm model
+    """
+    # save 20% of data for performance evaluation
+    X_train, X_test, y_train, y_test = train_test_split(features, labels, test_size=0.2)
+    # cross_validate.train_test_split
+    param = [
+        {
+            "kernel": ["linear"],
+            "C": [1, 10, 100, 1000]
+        },
+        {
+            "kernel": ["rbf"],
+            "C": [1, 10, 100, 1000],
+            "gamma": [1e-2, 1e-3, 1e-4, 1e-5]
+        }
+    ]
+
+    # request probability estimation
+    svm = SVC(probability=True)
+
+    # 10-fold cross validation, use 4 thread as each fold and each parameter set can be train in parallel
+    clf = GridSearchCV(svm, param,
+            cv=10, n_jobs=4, verbose=3)
+
+    clf.fit(X_train, y_train)
+
+    
+
+    print("\nBest parameters set:")
+    print(clf.best_params_)
+
+    y_predict=clf.predict(X_test)
+
+    labels=sorted(list(set(labels)))
+    print("\nConfusion matrix:")
+    print("Labels: {0}\n".format(",".join(labels)))
+    print(confusion_matrix(y_test, y_predict, labels=labels))
+
+    print("\nClassification report:")
+    print(classification_report(x_test, x_predict))
+
+    if os.path.exists(model_output_path):
+        joblib.dump(clf.best_estimator_, model_output_path)
+    else:
+        print("Cannot save trained svm model to {0}.".format(model_output_path))
+
+out_path = basepath + 'svm/'
+# if os.path.exists(basepath+'svm'):
+  # print("Done")
+train_svm_classifer(X,y,out_path)
